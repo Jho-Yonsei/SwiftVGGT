@@ -1,0 +1,16 @@
+numpy==1.26.4
+Pillow
+huggingface_hub
+einops
+safetensors
+evo==1.33.0
+open3d
+matplotlib
+scipy
+opencv-python
+scikit-image
+tqdm
+trimesh
+pycolmap==3.10.0
+pyceres
+pypose==0.7.3
