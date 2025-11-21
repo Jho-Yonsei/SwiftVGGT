@@ -1,7 +1,6 @@
 <p align="center">
 <h1 align="center">
-  SwiftVGGT: Scalable Visual Geometry Grounded Transformer
-  <br />for Large-Scale Scenes
+  SwiftVGGT: Scalable Visual Geometry Grounded Transformer for Large-Scale Scenes
   <br />
 </h1>
 <!-- <h3 align="center" style="color:#267CB9;">arXiv</h3> -->
@@ -24,7 +23,6 @@
 </p>
 
 ## 🔭 Introduction
-
 
 <p align="center">
   <img src="./assets/images/teaser.png" alt="Teaser">
