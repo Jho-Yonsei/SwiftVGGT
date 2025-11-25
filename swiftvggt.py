@@ -100,7 +100,7 @@ class SwiftVGGT:
         
         
     def load_images(self, image_dir):
-        self.image_paths = sorted(glob(os.path.join(image_dir, '*.png')))
+        self.image_paths = sorted([f for f in glob(os.path.join(image_dir, '*')) if f.lower().endswith(('.png', '.jpg', '.jpeg'))])
         images = load_images_rgb(self.image_paths)
         images_array = np.stack(images)
         vgg_input, patch_width, patch_height = get_vgg_input_imgs(images_array)
@@ -277,29 +277,74 @@ class SwiftVGGT:
         
     
     def align_chunks(self, sim3_list):
-        points_list = []
-        colors_list = []
         print("🔧 Align Temporal Chunks")
+
+        frame_points = {}
+        frame_confs  = {}
+
         for idx, (start, end) in enumerate(self.chunk_list):
             chunk_data = self.temporal_chunk_list[idx][1]
+
             if idx != 0:
-                print(f"\tAligning {idx:3d} -> {idx - 1:3d} (Total {self.num_chunks - 1})", end='\r', flush=True)
+                print(f"\tAligning {idx:3d} -> {idx - 1:3d} (Total {self.num_chunks - 1})", end="\r", flush=True)
                 s, R, t = sim3_list[idx - 1]
-                chunk_data['points_3d'] = apply_sim3_direct(chunk_data['points_3d'], s, R, t)
-            
-            points = chunk_data['points_3d'].reshape(-1, 3)
-            colors = (self.vgg_input[start: end].cpu().detach().numpy().transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
-            confs = chunk_data['depth_conf'].reshape(-1)
-            conf_threshold = np.mean(confs) * self.args.point_conf_threshold
-            
-            points, colors = confident_pointcloud(points=points, colors=colors, confs=confs, conf_threshold=conf_threshold, sample_ratio=self.args.sampling_ratio)
-            points_list.append(points)
-            colors_list.append(colors)
-        
-        points_3d = np.concatenate(points_list)
-        colors = np.concatenate(colors_list)
-        print('\n')
-        
+                chunk_data["points_3d"] = apply_sim3_direct(chunk_data["points_3d"], s, R, t)
+
+            pts_3d_chunk = chunk_data["points_3d"]
+            conf_chunk   = chunk_data["depth_conf"]
+
+            T_local = pts_3d_chunk.shape[0]
+
+            for local_f in range(T_local):
+                global_f = start + local_f
+
+                pts_f  = pts_3d_chunk[local_f]
+                conf_f = conf_chunk[local_f]
+
+                if global_f not in frame_points:
+                    frame_points[global_f] = []
+                    frame_confs[global_f]  = []
+
+                frame_points[global_f].append(pts_f)
+                frame_confs[global_f].append(conf_f)
+
+        print()
+
+        points_list = []
+        colors_list = []
+
+        for f in sorted(frame_points.keys()):
+            pts_list  = frame_points[f]
+            conf_list = frame_confs[f]
+
+            pts_stack  = np.stack(pts_list, axis=0)
+            conf_stack = np.stack(conf_list, axis=0)
+
+            pts_avg  = pts_stack.mean(axis=0)
+            conf_avg = conf_stack.mean(axis=0)
+
+            pts_flat   = pts_avg.reshape(-1, 3)
+            conf_flat  = conf_avg.reshape(-1)
+
+            img = (self.vgg_input[f].cpu().detach().numpy().transpose(1, 2, 0))
+            colors_flat = (img.reshape(-1, 3) * 255).astype(np.uint8)
+
+            conf_threshold = conf_flat.mean() * self.args.point_conf_threshold
+
+            pts_out, colors_out = confident_pointcloud(
+                points=pts_flat,
+                colors=colors_flat,
+                confs=conf_flat,
+                conf_threshold=conf_threshold,
+                sample_ratio=self.args.sampling_ratio,
+            )
+
+            points_list.append(pts_out)
+            colors_list.append(colors_out)
+
+        points_3d = np.concatenate(points_list, axis=0)
+        colors    = np.concatenate(colors_list, axis=0)
+
         return points_3d, colors
 
     
